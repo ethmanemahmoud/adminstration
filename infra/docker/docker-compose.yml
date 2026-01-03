@@ -1,0 +1,149 @@
+services:
+  # MQTT Broker
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: mqtt-broker
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    networks:
+      - mqtt-network
+
+  # Generator Service
+  generator:
+    build: ../../services/generator
+    container_name: generator
+    environment:
+      - BROKER_HOST=mosquitto
+      - BROKER_PORT=1883
+      - RAW_TOPIC=msg.raw
+      - INTERVAL_SECONDS=5
+    depends_on:
+      - mosquitto
+    networks:
+      - mqtt-network
+    restart: unless-stopped
+
+  # Keyword Filter Service
+  keyword-filter:
+    build: ../../services/keyword-filter
+    container_name: keyword-filter
+    environment:
+      - BROKER_HOST=mosquitto
+      - BROKER_PORT=1883
+      - INPUT_TOPIC=msg.raw
+      - OUTPUT_TOPIC=msg.keyword.result
+      - KEYWORD_BLACKLIST=URGENT,WIN,CLICK,OFFER
+    depends_on:
+      - mosquitto
+    networks:
+      - mqtt-network
+    restart: unless-stopped
+
+  # URL Inspector Service
+  url-inspector:
+    build: ../../services/url-inspector
+    container_name: url-inspector
+    environment:
+      - BROKER_HOST=mosquitto
+      - BROKER_PORT=1883
+      - INPUT_TOPIC=msg.raw
+      - OUTPUT_TOPIC=msg.url.result
+      - SUSPICIOUS_DOMAINS=suspicious-site.com,spam-domain.net
+    depends_on:
+      - mosquitto
+    networks:
+      - mqtt-network
+    restart: unless-stopped
+
+  # Format Checker Service
+  format-checker:
+    build: ../../services/format-checker
+    container_name: format-checker
+    environment:
+      - BROKER_HOST=mosquitto
+      - BROKER_PORT=1883
+      - INPUT_TOPIC=msg.raw
+      - OUTPUT_TOPIC=msg.format.result
+      - MAX_LENGTH=200
+      - FORBIDDEN_CHARS=|,<,>
+      - MAX_SYMBOL_RATIO=0.3
+    depends_on:
+      - mosquitto
+    networks:
+      - mqtt-network
+    restart: unless-stopped
+
+  # Aggregator Service
+  aggregator:
+    build: ../../services/aggregator
+    container_name: aggregator
+    environment:
+      - BROKER_HOST=mosquitto
+      - BROKER_PORT=1883
+      - TOPIC_KEYWORD=msg.keyword.result
+      - TOPIC_URL=msg.url.result
+      - TOPIC_FORMAT=msg.format.result
+      - OUTPUT_TOPIC=msg.score
+      - JOIN_TIMEOUT_SECONDS=3
+    depends_on:
+      - mosquitto
+      - keyword-filter
+      - url-inspector
+      - format-checker
+    networks:
+      - mqtt-network
+    restart: unless-stopped
+
+  # Final Router Service
+  final-router:
+    build: ../../services/final-router
+    container_name: final-router
+    environment:
+      - BROKER_HOST=mosquitto
+      - BROKER_PORT=1883
+      - INPUT_TOPIC=msg.score
+      - OUTPUT_TOPIC=msg.decision
+      - THRESHOLD_A=0.3
+      - THRESHOLD_B=0.7
+    depends_on:
+      - mosquitto
+      - aggregator
+    networks:
+      - mqtt-network
+    restart: unless-stopped
+
+  # UI Dashboard Service
+  ui-dashboard:
+    build: ../../services/ui-dashboard
+    container_name: ui-dashboard
+    environment:
+      - BROKER_HOST=mosquitto
+      - BROKER_PORT=1883
+      - TOPIC_RAW=msg.raw
+      - TOPIC_KEYWORD_RESULT=msg.keyword.result
+      - TOPIC_URL_RESULT=msg.url.result
+      - TOPIC_FORMAT_RESULT=msg.format.result
+      - TOPIC_SCORE=msg.score
+      - TOPIC_DECISION=msg.decision
+      - PORT=5000
+    ports:
+      - "5000:5000"
+    depends_on:
+      - mosquitto
+    networks:
+      - mqtt-network
+    restart: unless-stopped
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:
+
+networks:
+  mqtt-network:
+    driver: bridge
+

@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: format-checker
+  namespace: mqtt-filtering
+  labels:
+    app: format-checker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: format-checker
+  template:
+    metadata:
+      labels:
+        app: format-checker
+    spec:
+      containers:
+      - name: format-checker
+        image: docker-format-checker:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: BROKER_HOST
+          value: "mosquitto"
+        - name: BROKER_PORT
+          value: "1883"
+        - name: INPUT_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: topics-config
+              key: RAW_TOPIC
+        - name: OUTPUT_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: topics-config
+              key: FORMAT_RESULT_TOPIC
+        - name: MAX_LENGTH
+          valueFrom:
+            configMapKeyRef:
+              name: format-rules
+              key: MAX_LENGTH
+        - name: FORBIDDEN_CHARS
+          valueFrom:
+            configMapKeyRef:
+              name: format-rules
+              key: FORBIDDEN_CHARS
+        - name: MAX_SYMBOL_RATIO
+          valueFrom:
+            configMapKeyRef:
+              name: format-rules
+              key: MAX_SYMBOL_RATIO
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "python -c 'import paho.mqtt.client as mqtt; c = mqtt.Client(); c.connect(\"mosquitto\", 1883, 1); c.disconnect()'"
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "ps aux | grep -v grep | grep python"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+

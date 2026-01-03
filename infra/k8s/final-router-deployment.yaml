@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: final-router
+  namespace: mqtt-filtering
+  labels:
+    app: final-router
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: final-router
+  template:
+    metadata:
+      labels:
+        app: final-router
+    spec:
+      containers:
+      - name: final-router
+        image: docker-final-router:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: BROKER_HOST
+          value: "mosquitto"
+        - name: BROKER_PORT
+          value: "1883"
+        - name: INPUT_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: topics-config
+              key: SCORE_TOPIC
+        - name: OUTPUT_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: topics-config
+              key: DECISION_TOPIC
+        - name: THRESHOLD_A
+          valueFrom:
+            configMapKeyRef:
+              name: router-thresholds
+              key: THRESHOLD_A
+        - name: THRESHOLD_B
+          valueFrom:
+            configMapKeyRef:
+              name: router-thresholds
+              key: THRESHOLD_B
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "python -c 'import paho.mqtt.client as mqtt; c = mqtt.Client(); c.connect(\"mosquitto\", 1883, 1); c.disconnect()'"
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "ps aux | grep -v grep | grep python"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+

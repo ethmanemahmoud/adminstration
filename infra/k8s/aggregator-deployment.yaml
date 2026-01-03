@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aggregator
+  namespace: mqtt-filtering
+  labels:
+    app: aggregator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aggregator
+  template:
+    metadata:
+      labels:
+        app: aggregator
+    spec:
+      containers:
+      - name: aggregator
+        image: docker-aggregator:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: BROKER_HOST
+          value: "mosquitto"
+        - name: BROKER_PORT
+          value: "1883"
+        - name: TOPIC_KEYWORD
+          valueFrom:
+            configMapKeyRef:
+              name: topics-config
+              key: KEYWORD_RESULT_TOPIC
+        - name: TOPIC_URL
+          valueFrom:
+            configMapKeyRef:
+              name: topics-config
+              key: URL_RESULT_TOPIC
+        - name: TOPIC_FORMAT
+          valueFrom:
+            configMapKeyRef:
+              name: topics-config
+              key: FORMAT_RESULT_TOPIC
+        - name: OUTPUT_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: topics-config
+              key: SCORE_TOPIC
+        - name: JOIN_TIMEOUT_SECONDS
+          valueFrom:
+            configMapKeyRef:
+              name: aggregator-config
+              key: JOIN_TIMEOUT_SECONDS
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "python -c 'import paho.mqtt.client as mqtt; c = mqtt.Client(); c.connect(\"mosquitto\", 1883, 1); c.disconnect()'"
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "ps aux | grep -v grep | grep python"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+

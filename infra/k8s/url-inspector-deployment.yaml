@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: url-inspector
+  namespace: mqtt-filtering
+  labels:
+    app: url-inspector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: url-inspector
+  template:
+    metadata:
+      labels:
+        app: url-inspector
+    spec:
+      containers:
+      - name: url-inspector
+        image: docker-url-inspector:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: BROKER_HOST
+          value: "mosquitto"
+        - name: BROKER_PORT
+          value: "1883"
+        - name: INPUT_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: topics-config
+              key: RAW_TOPIC
+        - name: OUTPUT_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: topics-config
+              key: URL_RESULT_TOPIC
+        - name: SUSPICIOUS_DOMAINS
+          valueFrom:
+            configMapKeyRef:
+              name: suspicious-domains
+              key: SUSPICIOUS_DOMAINS
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "python -c 'import paho.mqtt.client as mqtt; c = mqtt.Client(); c.connect(\"mosquitto\", 1883, 1); c.disconnect()'"
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "ps aux | grep -v grep | grep python"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+

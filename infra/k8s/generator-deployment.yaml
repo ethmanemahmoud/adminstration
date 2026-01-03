@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: generator
+  namespace: mqtt-filtering
+  labels:
+    app: generator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: generator
+  template:
+    metadata:
+      labels:
+        app: generator
+    spec:
+      containers:
+      - name: generator
+        image: docker-generator:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: BROKER_HOST
+          value: "mosquitto"
+        - name: BROKER_PORT
+          value: "1883"
+        - name: RAW_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: topics-config
+              key: RAW_TOPIC
+        - name: INTERVAL_SECONDS
+          valueFrom:
+            configMapKeyRef:
+              name: generator-config
+              key: INTERVAL_SECONDS
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "python -c 'import paho.mqtt.client as mqtt; c = mqtt.Client(); c.connect(\"mosquitto\", 1883, 1); c.disconnect()'"
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "ps aux | grep -v grep | grep python"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+
